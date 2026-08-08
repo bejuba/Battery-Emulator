@@ -276,6 +276,7 @@ class MebBattery : public CanBattery, public IsoTp {
   static const int Klima_EV_06 = 0x1A55552B;
   static const int Klima_EV_07 = 0x12DD5513;
   static const int HVEM_04 = 0x569;
+  static const int NVEM_10 = 0x20F;
   static const int eTM_01 = 0x16A954B4;
   static const int NMH_Gateway = 0x1B000010;
   static const int NMH_Klima = 0x1B000046;
@@ -387,7 +388,6 @@ class MebBattery : public CanBattery, public IsoTp {
   static constexpr unsigned long ISO_MEASUREMENT_PERIOD_MS = 15000;
   bool iso_measurement_active = false;   // true = request measurement, false = no measurement
   unsigned long iso_measurement_ms = 0;  // start of the current 15 seconds phase
-
   // DCDC converter state, decoded from the received DCDC_01/02/04 messages.
   uint8_t dcdc_actual_mode = DCDC_MODE_STANDBY;  // DC mode from DCDC_04
   bool dcdc_precharge_complete = false;          // DC precharge status from DCDC_04
@@ -509,7 +509,7 @@ class MebBattery : public CanBattery, public IsoTp {
   uint16_t predicted_power_dyn_standard_watt = 0;
   uint8_t predicted_time_dyn_standard_minutes = 0;
   uint8_t mux = 0;
-  //uint16_t cellvoltages[160] = {0};
+  uint16_t cellvoltages[160] = {0};
   uint16_t duration_discharge_power_watt = 0;
   uint16_t duration_charge_power_watt = 0;
   uint16_t maximum_voltage = 0;
@@ -730,6 +730,11 @@ class MebBattery : public CanBattery, public IsoTp {
                                  .DLC = 8,
                                  .ID = Motor_EV_01,  // content
                                  .data = {0x00, 0x80, 0x12, 0x00, 0x00, 0x00, 0x30, 0x96}};
+  CAN_frame NVEM_10_frame = {.FD = true,
+                                 .ext_ID = false,
+                                 .DLC = 8,
+                                 .ID = NVEM_10,  // content
+                                 .data = {0x3E, 0x09, 0x00, 0x00, 0x40, 0x00, 0xFD, 0x00}};
   uint32_t can_msg_received = 0;
 };
 

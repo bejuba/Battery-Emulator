@@ -79,6 +79,8 @@ static const uint8_t EM_HYB_05_PDU_CONST[16] = {0xC7, 0xD8, 0xF1, 0xC4, 0xE3, 0x
                                                 0xA1, 0xCB, 0x02, 0x4F, 0x57, 0x4E, 0x8E, 0xE4};
 static const uint8_t BMS_11_PDU_CONST[16] = {0x79, 0xB9, 0x67, 0xAD, 0xD5, 0xF7, 0x70, 0xAA,
                                              0x44, 0x61, 0x5A, 0xDC, 0x26, 0xB4, 0xD2, 0xC3};
+static const uint8_t NVEM_10_PDU_CONST[16] = {0xD4, 0x22, 0xAD, 0x3F, 0x25, 0xAA, 0x62, 0x5B,
+                                              0xDC, 0x73, 0xED, 0xC3, 0x9A, 0x14, 0x2F, 0x3E};
 
 /** Calculate the CRC checksum for VAG CAN Messages
  *
@@ -178,6 +180,9 @@ uint8_t MebBattery::vw_crc_calc(const uint8_t* inputBytes, uint8_t length, uint3
     case BMS_11:
       const_pdu_byte = BMS_11_PDU_CONST[counter];
       break;
+    case NVEM_10:
+      const_pdu_byte = NVEM_10_PDU_CONST[counter];
+      break;
     default:  // this won't lead to correct CRC checksums
       logging.println("Checksum request unknown");
       const_pdu_byte = 0x00;
@@ -243,7 +248,11 @@ void MebBattery::
   //  datalayer_battery->status.temperature_max_dC = (battery_max_temp * 10) / 64;
 
   //Map all cell voltages to the global array
-  memcpy(datalayer_battery->status.cell_voltages_mV, cellvoltages_polled, 108 * sizeof(uint16_t));
+  if (platform == VAGPlatform::MQB_Evo) {
+    memcpy(datalayer_battery->status.cell_voltages_mV, cellvoltages, 96 * sizeof(uint16_t));
+  } else {
+    memcpy(datalayer_battery->status.cell_voltages_mV, cellvoltages_polled, 108 * sizeof(uint16_t));
+  }
 
   datalayer_battery->status.insulation_resistance_kOhm = isolation_resistance_kOhm * 5;
   if (isolation_status != 0 && isolation_status != 7) {
@@ -273,6 +282,7 @@ void MebBattery::
   datalayer_meb->HVIL = BMS_HVIL_status;
   datalayer_meb->BMS_mode = BMS_mode;
   datalayer_meb->DCDC_mode = dcdc_actual_mode;
+  datalayer_meb->DCDC_precharge_complete = dcdc_precharge_complete;
   datalayer_meb->DCDC_HV_voltage_dV = dcdc_hv_voltage_dV;
   datalayer_meb->DCDC_HV_current_dA = dcdc_hv_current_dA;
   datalayer_meb->DCDC_LV_voltage_dV = dcdc_lv_voltage_dV;
@@ -466,11 +476,7 @@ void MebBattery::handle_incoming_can_frame(CAN_frame rx_frame) {
             datalayer_meb->celltemperature_dC[i] = ((int16_t)rx_frame.data.u8[i + 1] * 5) - 400;
           }
           break;
-        /*
-        Broadcast cellvoltages are currently disabled, since they're not in use.
 
-        The polled cellvoltages are being used instead.
-        ----
         case 1:  // Cellvoltages 1-42
           cellvoltages[0] = (((rx_frame.data.u8[2] & 0x0F) << 8) | rx_frame.data.u8[1]) + 1000;
           cellvoltages[1] = ((rx_frame.data.u8[3] << 4) | (rx_frame.data.u8[2] >> 4)) + 1000;
@@ -639,7 +645,6 @@ void MebBattery::handle_incoming_can_frame(CAN_frame rx_frame) {
           cellvoltages[158] = (((rx_frame.data.u8[50] & 0x0F) << 8) | rx_frame.data.u8[49]) + 1000;
           cellvoltages[159] = ((rx_frame.data.u8[51] << 4) | (rx_frame.data.u8[50] >> 4)) + 1000;
           break;
-        */
         default:  //Invalid mux
           //TODO: Add corrupted CAN message counter tick?
           break;
@@ -978,13 +983,11 @@ void MebBattery::transmit_can(unsigned long currentMillis) {
     if (user_selected_VW_dcdc_converter) {
       transmit_can_frame(&NVEM_10_frame);  // 12V setpoint — only meaningful with a DC-DC converter
     }
-    }
   }
   // Send 100ms CAN Message
   if (currentMillis - previousMillis100ms >= INTERVAL_100_MS) {
     previousMillis100ms = currentMillis;
 
-    //HV request and DC/DC control lies in 0x503
     // HV request and DC/DC control lies in 0x503 (HVK_01). With a VW DC-DC converter on the bus the
     // coordinator sequences it through precharge and hands off to the BMS for AC charging; without
     // one the legacy path drives the emulator's own precharge instead. Both finalize counter + CRC
@@ -1020,7 +1023,7 @@ void MebBattery::transmit_can(unsigned long currentMillis) {
     Motor_EV_01_frame.data.u8[0] = vw_crc_calc(Motor_EV_01_frame.data.u8, Motor_EV_01_frame.DLC, Motor_EV_01_frame.ID);
 
     counter_100ms = (counter_100ms + 1) % 16;  //Goes from 0-1-2-3...15-0-1-2-3..
-    transmit_can_frame(&HVK_01_frame);
+    // HVK_01 is composed and transmitted inside high_voltage_coordinator() above.
     transmit_can_frame(&HVLM_14_frame);
     transmit_can_frame(&HVLM_13_frame);
     transmit_can_frame(&Klemmen_Status_01_frame);
@@ -1038,7 +1041,7 @@ void MebBattery::transmit_can(unsigned long currentMillis) {
     // MSG_HYB_30_frame does not need CRC even though it has it. Empty in some logs as well.
     transmit_can_frame(&Klima_Sensor_02_frame);
     transmit_can_frame(&MSG_HYB_30_frame);
-    transmit_can_frame(&NMH_DCDC_NV_frame);
+    //transmit_can_frame(&NMH_DCDC_NV_frame);
     transmit_can_frame(&NMH_Klima_frame);
     // based on KL15 state set the network management to bus sleep
     if (Klemmen_Status_01_frame.data.u8[2] & 0x02) {
@@ -1105,7 +1108,11 @@ void MebBattery::transmit_can(unsigned long currentMillis) {
         poll_pid = PID_SOH;
         break;
       case PID_SOH:
-        poll_pid = PID_CELLVOLTAGE_CELL_1;  // Start polling cell voltages
+        if (platform == VAGPlatform::MQB_Evo) {
+          poll_pid = PID_SOC; // MQB Evo reads cell voltages directly from BMS_CMC_04;
+        } else {
+          poll_pid = PID_CELLVOLTAGE_CELL_1;  // Start polling cell voltages
+        }
         break;
       // Cell Voltage Cases.
       // Most of these are handled in the default case.
@@ -1555,8 +1562,7 @@ void MebBattery::high_voltage_coordinator(unsigned long currentMillis) {
       dcdc_request_mode = DCDC_MODE_PRECHARGE_ON;
       precharge_active = true;
       if (BMS_mode == BMS_TARGET_AC_CHARGING) {
-        //hv_coordinator_state = HvCoordinatorState::REQUEST_DCDC_BUCK;
-        hv_coordinator_state = HvCoordinatorState::RUNNING; //workaround no 12V battery
+        hv_coordinator_state = HvCoordinatorState::REQUEST_DCDC_BUCK;
       }
       break;
 
@@ -1573,8 +1579,7 @@ void MebBattery::high_voltage_coordinator(unsigned long currentMillis) {
     case HvCoordinatorState::RUNNING:
       // Steady state: HV up, DCDC in buck, precharge bit cleared.
       bms_request_mode = BMS_TARGET_AC_CHARGING;
-      //dcdc_request_mode = DCDC_MODE_CHARGE_12V;
-      dcdc_request_mode = DCDC_MODE_STANDBY; //workaround no 12V battery
+      dcdc_request_mode = DCDC_MODE_CHARGE_12V;
       precharge_active = false;
       break;
   }
@@ -1898,11 +1903,8 @@ void MebBattery::uds_response_handler(const uint8_t* data, int len, enum isotp_t
       } else {
         // Any other NRC: the transaction is complete (rejected), allow the next request.
         uds_request_pending = false;
+        logging.printf("MEB: UDS NRC 0x%02X for SID 0x%02X\n", data[2], data[1]);
         if (basic_settings_state != BasicSettingsState::IDLE && data[1] == RoutineControl) {
-#ifdef MEB_DEBUG
-          logging.printf("MEB: BasicSettings: NRC 0x%02X for SID 0x%02X, aborting\n", len >= 3 ? data[2] : 0,
-                         len >= 2 ? data[1] : 0);
-#endif
           basic_settings_state = BasicSettingsState::IDLE;
         }
       }
