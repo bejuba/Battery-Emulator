@@ -1138,6 +1138,10 @@ String raw_settings_processor(const String& var, BatteryEmulatorSettingsStore& s
     return settings.getBool("LEAFAUTOOFS", true) ? "checked" : "";
   }
 
+  if (var == "VCUCNTCTRL") {
+    return settings.getBool("VCUCNTCTRL") ? "checked" : "";
+  }
+
   if (var == "VWDCDC") {
     return settings.getBool("VWDCDC") ? "checked" : "";
   }
@@ -1822,6 +1826,11 @@ String qnhck_zero_text(uint16_t zero_mV) {
       display: contents;
     }
 
+    form .if-vcu { display: none; }
+    form[data-inverter="22"] .if-vcu {
+      display: contents;
+    }
+
     form .if-sofar { display: none; }
     form[data-inverter="17"] .if-sofar {
       display: contents;
@@ -2275,6 +2284,11 @@ String qnhck_zero_text(uint16_t zero_mV) {
         <label>Inverter interface: </label><select name='INVCOMM'>
         %INVCOMM%     
         </select>
+        </div>
+
+        <div class="if-vcu">
+        <label for='vcucntctrl'>ZombieVerter contactor control: </label>
+        <input type='checkbox' name='VCUCNTCTRL' id='vcucntctrl' value='on' %VCUCNTCTRL% />
         </div>
 
         <div class="if-sofar">

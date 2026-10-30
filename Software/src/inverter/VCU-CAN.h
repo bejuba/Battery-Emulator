@@ -3,6 +3,8 @@
 
 #include "CanInverterProtocol.h"
 
+extern bool user_selected_vcu_contactor_control;
+
 class VCUInverter : public CanInverterProtocol {
  public:
   const char* name() override { return Name; }
@@ -12,7 +14,7 @@ class VCUInverter : public CanInverterProtocol {
   static constexpr const char* Name = "VCU mode: Nissan LEAF battery";
 
   // The ZombieVerter commands the contactors via its opmode spot value, sent with a CAN mapping.
-  bool controls_contactor() override { return true; }
+  bool controls_contactor() override { return user_selected_vcu_contactor_control; }
   bool allows_contactor_closing() override;
 
   // ZombieVerter CAN mapping: ID 0x3A0, position 0, length 8 bit, gain 1, spot value "opmode".

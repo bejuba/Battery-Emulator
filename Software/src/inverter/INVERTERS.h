@@ -16,6 +16,7 @@ extern InverterProtocol* inverter;
 // Call to initialize the build-time selected inverter. Safe to call even though inverter was not selected.
 bool setup_inverter();
 
+extern bool user_selected_vcu_contactor_control;
 extern uint16_t user_selected_pylon_send;
 extern uint16_t user_selected_inverter_cells;
 extern uint16_t user_selected_inverter_modules;
