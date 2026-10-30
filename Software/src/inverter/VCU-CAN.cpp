@@ -1,8 +1,10 @@
-#include "VCU-CAN.h"
+#include <Arduino.h>
+
 #include "../communication/can/comm_can.h"
 #include "../datalayer/datalayer.h"
 #include "../devboard/utils/common_functions.h"  //For CRC table
 #include "../inverter/INVERTERS.h"
+#include "VCU-CAN.h"
 
 /*TODO once testing starts:
 - Map more optional content into all message
@@ -76,8 +78,22 @@ void VCUInverter::update_values() {  //Called every 1s
   LEAF_5BC.data.u8[4] = static_cast<uint8_t>((datalayer.aggregate.soh_pptt / 100) << 1);
 }
 
+bool VCUInverter::allows_contactor_closing() {
+  // Fail safe: open contactors if the opmode frame is missing or stale
+  if (!opmodeReceived || (millis() - lastOpmodeFrameMillis) >= INTERVAL_2_S) {
+    return false;
+  }
+  return vcuOpmode == MOD_PRECHARGE || vcuOpmode == MOD_RUN || vcuOpmode == MOD_CHARGE;
+}
+
 void VCUInverter::map_can_frame_to_variable(CAN_frame rx_frame) {
   switch (rx_frame.ID) {
+    case OPMODE_CAN_ID:
+      vcuOpmode = rx_frame.data.u8[0];
+      lastOpmodeFrameMillis = millis();
+      opmodeReceived = true;
+      datalayer.system.status.CAN_inverter_still_alive = CAN_STILL_ALIVE;
+      break;
     case 0x1F2:
       datalayer.system.status.CAN_inverter_still_alive = CAN_STILL_ALIVE;
       break;
