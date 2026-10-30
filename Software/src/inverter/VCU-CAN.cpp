@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #include "VCU-CAN.h"
 #include "../communication/can/comm_can.h"
 #include "../datalayer/datalayer.h"
