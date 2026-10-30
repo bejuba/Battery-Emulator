@@ -402,8 +402,7 @@ class MebBattery : public CanBattery, public IsoTp {
   bool dcdc_crash_reset_requested = false;  // set from the WebUI
   bool dcdc_dtc_read_requested = false;     // set from the WebUI together with the BMS readout
   bool dcdc_dtc_read_in_progress = false;
-  bool dcdc_dtc_awaiting_session = false;  // DTC read waits for the extended session response
-  bool dcdc_uds_request_pending = false;   // one DC/DC transaction at a time, independent of the BMS
+  bool dcdc_uds_request_pending = false;  // one DC/DC transaction at a time, independent of the BMS
   unsigned long dcdc_uds_request_timestamp = 0;
   // Crash unlock runs the same steps as the BMS basic settings sequence.
   BasicSettingsState dcdc_crash_state = BasicSettingsState::IDLE;

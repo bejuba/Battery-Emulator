@@ -2113,11 +2113,9 @@ String qnhck_zero_text(uint16_t zero_mV) {
         <div class="if-vw">
             <label for='vwdcdc'>DC-DC voltage converter: </label>
             <input type='checkbox' name='VWDCDC' id='vwdcdc' value='on' %VWDCDC% />
-            <small style='grid-column: 1 / -1;'>Use a VW DC-DC converter for HV precharge and 12V supply instead of the emulator's precharge circuit.</small>
 
             <label for='vwdcdcv'>DC-DC Low voltage setting (V): </label>
             <input name='VWDCDCV' id='vwdcdcv' type='number' min='10.6' max='14.5' step='0.025' value='%VWDCDCV%' />
-            <small style='grid-column: 1 / -1;'>12V charge voltage, 10.6-14.5 V (default 13.3). 10.6 V puts the converter in standby after precharge.</small>
         </div>
 
         <div class="if-daly">
