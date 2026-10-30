@@ -1,10 +1,10 @@
 #include <Arduino.h>
 
-#include "VCU-CAN.h"
 #include "../communication/can/comm_can.h"
 #include "../datalayer/datalayer.h"
 #include "../devboard/utils/common_functions.h"  //For CRC table
 #include "../inverter/INVERTERS.h"
+#include "VCU-CAN.h"
 
 /*TODO once testing starts:
 - Map more optional content into all message
