@@ -1957,7 +1957,9 @@ void MebBattery::handle_dcdc_diag(unsigned long currentMillis) {
       logging.println("MEB: DC/DC crash reset: UDS timeout, aborting");
     }
     if (dcdc_dtc_read_in_progress) {
+      logging.println("MEB: DC/DC DTC read timed out");
       dcdc_dtc_read_in_progress = false;
+      dcdc_dtc_awaiting_session = false;
       dcdc_dtc.dtc_read_failed = true;
       dcdc_dtc.dtc_last_read_millis = currentMillis;  // shows the failure instead of "not read yet"
     }
@@ -1970,9 +1972,12 @@ void MebBattery::handle_dcdc_diag(unsigned long currentMillis) {
       logging.println("MEB: DC/DC crash reset: starting");
     } else if (dcdc_dtc_read_requested) {
       // UDS ReadDTCInformation, reportDTCByStatusMask, active/confirmed only — as for the BMS.
+      // The DC/DC may only answer in the extended session, so open it first; the response
+      // handler sends the actual read.
       dcdc_dtc_read_requested = false;
-      uint8_t payload[3] = {ReadDTCInformation, 0x02, 0x09};
+      uint8_t payload[2] = {DiagnosticSessionControl, ExtendedSession};
       dcdc_uds_send(payload, sizeof(payload), currentMillis);
+      dcdc_dtc_awaiting_session = true;
       dcdc_dtc_read_in_progress = true;
       dcdc_dtc.dtc_read_failed = false;
       return;
@@ -2023,6 +2028,10 @@ void MebBattery::dcdc_uds_response_handler(const uint8_t* data, int len) {
       dcdc_uds_request_pending = false;
       if (dcdc_crash_state == BasicSettingsState::WAIT_EXT_SESSION) {
         dcdc_crash_state = BasicSettingsState::SEND_SEED_REQ;
+      } else if (dcdc_dtc_awaiting_session) {
+        dcdc_dtc_awaiting_session = false;
+        uint8_t payload[3] = {ReadDTCInformation, 0x02, 0x09};
+        dcdc_uds_send(payload, sizeof(payload), millis());
       }
       break;
     case (UDS_RESPONSE_SID_OF(SecurityAccess)):
@@ -2088,8 +2097,9 @@ void MebBattery::dcdc_uds_response_handler(const uint8_t* data, int len) {
         break;
       }
       dcdc_uds_request_pending = false;
-      if (data[1] == ReadDTCInformation) {
+      if (data[1] == ReadDTCInformation || (data[1] == DiagnosticSessionControl && dcdc_dtc_awaiting_session)) {
         dcdc_dtc_read_in_progress = false;
+        dcdc_dtc_awaiting_session = false;
         dcdc_dtc.dtc_read_failed = true;
         dcdc_dtc.dtc_last_read_millis = millis();
       }
