@@ -11,7 +11,19 @@ class VCUInverter : public CanInverterProtocol {
   void map_can_frame_to_variable(CAN_frame rx_frame);
   static constexpr const char* Name = "VCU mode: Nissan LEAF battery";
 
+  // The ZombieVerter commands the contactors via its opmode spot value, sent with a CAN mapping.
+  bool controls_contactor() override { return true; }
+  bool allows_contactor_closing() override;
+
+  // ZombieVerter CAN mapping: ID 0x3A0, position 0, length 8 bit, gain 1, spot value "opmode".
+  static constexpr uint16_t OPMODE_CAN_ID = 0x3A0;
+  // ZombieVerter opmode enum: 0=Off 1=Run 2=Precharge 3=PchFail 4=Charge
+  enum VcuOpmode : uint8_t { MOD_OFF = 0, MOD_RUN = 1, MOD_PRECHARGE = 2, MOD_PCHFAIL = 3, MOD_CHARGE = 4 };
+
  private:
+  unsigned long lastOpmodeFrameMillis = 0;
+  bool opmodeReceived = false;
+  uint8_t vcuOpmode = MOD_OFF;
   unsigned long previousMillis10ms = 0;
   unsigned long previousMillis100ms = 0;
   unsigned long previousMillis500ms = 0;
