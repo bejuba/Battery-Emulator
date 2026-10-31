@@ -159,6 +159,7 @@ void init_stored_settings() {
   user_selected_LEAF_auto_current_offset = settings.getBool("LEAFAUTOOFS", true);
   user_selected_VW_dcdc_converter = settings.getBool("VWDCDC", false);
   user_selected_vcu_contactor_control = settings.getBool("VCUCNTCTRL", false);
+  user_selected_vcu_opmode_fault_open_immediately = settings.getBool("VCUFLTOPEN", false);
   temp = settings.getUInt("VCUOPID", 0x3A0);
   if (temp < 1 || temp > 0x7FF || vcu_opmode_can_id_collides(temp)) {
     logging.printf("VCU opmode CAN ID 0x%X is invalid or collides, using default 0x3A0\n", (unsigned)temp);

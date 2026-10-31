@@ -29,6 +29,8 @@ class VcuOpmodeTest : public ::testing::Test {
     user_selected_vcu_opmode_byte = 0;
     user_selected_vcu_opmode_timeout_ms = 500;
     user_selected_vcu_opmode_open_delay_ms = 500;
+    user_selected_vcu_opmode_fault_open_immediately = false;
+    datalayer.aggregate.current_dA = 0;
     datalayer.battery.status.real_bms_status = BMS_ACTIVE;
     datalayer.system.status.system_status = ACTIVE;
     // Settle the file-static permission latch from earlier tests
@@ -46,7 +48,7 @@ class VcuOpmodeTest : public ::testing::Test {
   VCUInverter vcu;
 };
 
-TEST_F(VcuOpmodeTest, AllowedInRunAndRevokedAfterDelayWhenOff) {
+TEST_F(VcuOpmodeTest, AllowedInRunAndRevokedAfterDelayWhenOffAtZeroCurrent) {
   at(300000);
   vcu.map_can_frame_to_variable(opmode_frame(VCUInverter::MOD_RUN));
   EXPECT_TRUE(vcu.allows_contactor_closing());
@@ -68,6 +70,34 @@ TEST_F(VcuOpmodeTest, UnknownAndPreheatValuesAreOff) {
   }
 }
 
+TEST_F(VcuOpmodeTest, HoldsWhileCurrentFlowsThenOpensAtLowCurrent) {
+  at(300000);
+  vcu.map_can_frame_to_variable(opmode_frame(VCUInverter::MOD_RUN));
+  EXPECT_TRUE(vcu.allows_contactor_closing());
+  datalayer.aggregate.current_dA = 300;  // 30 A
+  at(300100);
+  vcu.map_can_frame_to_variable(opmode_frame(VCUInverter::MOD_OFF));
+  EXPECT_TRUE(vcu.allows_contactor_closing());
+  at(305000);
+  EXPECT_TRUE(vcu.allows_contactor_closing());  // Still loaded, hold
+  datalayer.aggregate.current_dA = -10;
+  EXPECT_FALSE(vcu.allows_contactor_closing());
+}
+
+TEST_F(VcuOpmodeTest, HoldIsBoundedTo10Seconds) {
+  at(300000);
+  vcu.map_can_frame_to_variable(opmode_frame(VCUInverter::MOD_RUN));
+  EXPECT_TRUE(vcu.allows_contactor_closing());
+  datalayer.aggregate.current_dA = 300;
+  at(300100);
+  vcu.map_can_frame_to_variable(opmode_frame(VCUInverter::MOD_OFF));
+  EXPECT_TRUE(vcu.allows_contactor_closing());
+  at(310099);
+  EXPECT_TRUE(vcu.allows_contactor_closing());
+  at(310100);
+  EXPECT_FALSE(vcu.allows_contactor_closing());
+}
+
 TEST_F(VcuOpmodeTest, WatchdogTimeoutMeansOff) {
   at(300000);
   vcu.map_can_frame_to_variable(opmode_frame(VCUInverter::MOD_CHARGE));
@@ -87,10 +117,27 @@ TEST_F(VcuOpmodeTest, NotGrantedWithoutHealthyBattery) {
   EXPECT_FALSE(vcu.allows_contactor_closing());
 }
 
-TEST_F(VcuOpmodeTest, RealBatteryFaultOpensImmediately) {
+TEST_F(VcuOpmodeTest, BatteryFaultHoldsUnderLoadByDefault) {
   at(300000);
   vcu.map_can_frame_to_variable(opmode_frame(VCUInverter::MOD_RUN));
   EXPECT_TRUE(vcu.allows_contactor_closing());
+  datalayer.aggregate.current_dA = 300;
+  datalayer.battery.status.real_bms_status = BMS_FAULT;
+  at(300800);
+  vcu.map_can_frame_to_variable(opmode_frame(VCUInverter::MOD_RUN));
+  EXPECT_TRUE(vcu.allows_contactor_closing());
+  at(301500);
+  EXPECT_TRUE(vcu.allows_contactor_closing());
+  datalayer.aggregate.current_dA = 5;
+  EXPECT_FALSE(vcu.allows_contactor_closing());
+}
+
+TEST_F(VcuOpmodeTest, BatteryFaultOpensImmediatelyWhenConfigured) {
+  user_selected_vcu_opmode_fault_open_immediately = true;
+  at(300000);
+  vcu.map_can_frame_to_variable(opmode_frame(VCUInverter::MOD_RUN));
+  EXPECT_TRUE(vcu.allows_contactor_closing());
+  datalayer.aggregate.current_dA = 300;
   datalayer.battery.status.real_bms_status = BMS_FAULT;
   at(300010);
   EXPECT_FALSE(vcu.allows_contactor_closing());

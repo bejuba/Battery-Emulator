@@ -37,6 +37,7 @@ uint16_t user_selected_vcu_opmode_can_id = 0x3A0;
 uint8_t user_selected_vcu_opmode_byte = 0;
 uint16_t user_selected_vcu_opmode_timeout_ms = 500;
 uint16_t user_selected_vcu_opmode_open_delay_ms = 500;
+bool user_selected_vcu_opmode_fault_open_immediately = false;
 uint16_t user_selected_pylon_send = 0;
 uint16_t user_selected_inverter_cells = 0;
 uint16_t user_selected_inverter_modules = 0;

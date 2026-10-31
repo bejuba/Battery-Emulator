@@ -1142,6 +1142,10 @@ String raw_settings_processor(const String& var, BatteryEmulatorSettingsStore& s
     return settings.getBool("VCUCNTCTRL") ? "checked" : "";
   }
 
+  if (var == "VCUFLTOPEN") {
+    return settings.getBool("VCUFLTOPEN") ? "checked" : "";
+  }
+
   if (var == "VCUOPID") {
     return "0x" + String(settings.getUInt("VCUOPID", 0x3A0), HEX);
   }
@@ -2311,8 +2315,10 @@ String qnhck_zero_text(uint16_t zero_mV) {
         <input name='VCUOPBYTE' type='number' value="%VCUOPBYTE%" min="0" max="7" step="1" />
         <label>Opmode timeout, ms: </label>
         <input name='VCUOPTMO' type='number' value="%VCUOPTMO%" min="200" max="5000" step="50" />
-        <label>Open delay after opmode off, ms: </label>
+        <label>Minimum delay before opening, ms: </label>
         <input name='VCUOPDLY' type='number' value="%VCUOPDLY%" min="0" max="5000" step="50" />
+        <label>Open immediately on battery fault: </label>
+        <input type='checkbox' name='VCUFLTOPEN' value='on' %VCUFLTOPEN% />
         </div>
 
         <div class="if-sofar">

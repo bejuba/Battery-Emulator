@@ -79,6 +79,8 @@ void VCUInverter::update_values() {  //Called every 1s
 }
 
 namespace {
+constexpr unsigned long VCU_OPEN_HOLD_MAX_MS = 10000;  // Max time to wait for the current to drop before opening
+constexpr int32_t VCU_OPEN_CURRENT_THRESHOLD_dA = 18;  // 1.8 A, same as the equipment stop pause
 // Opmode state, written by the CAN receive path and read by the contactor handler and web UI
 int16_t last_opmode = -1;  // -1 until the first valid frame has arrived
 unsigned long last_opmode_ms = 0;
@@ -140,19 +142,22 @@ const char* vcu_opmode_name(int16_t opmode) {
 
 /* Permission for the contactor state machine, evaluated every contactor handler pass.
  * - Granted only while opmode is Precharge/Run/Charge, the frame is fresh and the real battery is healthy.
- * - Real battery fault: revoked at once, no delay.
- * - Opmode off/unknown or stale frame: revoked after the configured delay, so the Zombie can bring
- *   the current to zero first. Boot state is off until a valid frame arrives. */
+ * - Revoked (opmode off/unknown, stale frame, or real battery fault): never remove torque abruptly. The
+ *   permission is held until the pack current is near zero (below 1.8 A, as the equipment stop does) and at
+ *   least the open delay has passed. The hold is bounded by VCU_OPEN_HOLD_MAX_MS, after which we open anyway.
+ * - Real battery fault with "open immediately on fault" set: revoked at once.
+ * Boot state is off until a valid frame arrives. */
 bool VCUInverter::allows_contactor_closing() {
   unsigned long now = millis();
+  bool bms_fault = datalayer.battery.status.real_bms_status == BMS_FAULT;
 
-  if (datalayer.battery.status.real_bms_status == BMS_FAULT) {
+  if (bms_fault && user_selected_vcu_opmode_fault_open_immediately) {
     permission = false;
     delay_running = false;
     return false;
   }
 
-  bool wanted = opmode_fresh(now) && opmode_allows_closing(static_cast<uint8_t>(last_opmode));
+  bool wanted = opmode_fresh(now) && opmode_allows_closing(static_cast<uint8_t>(last_opmode)) && !bms_fault;
   bool healthy =
       datalayer.system.status.system_status != FAULT && (datalayer.battery.status.real_bms_status == BMS_STANDBY ||
                                                          datalayer.battery.status.real_bms_status == BMS_ACTIVE);
@@ -169,7 +174,13 @@ bool VCUInverter::allows_contactor_closing() {
       delay_running = true;
       delay_start_ms = now;
     }
-    if (now - delay_start_ms >= user_selected_vcu_opmode_open_delay_ms) {
+    unsigned long held = now - delay_start_ms;
+    bool current_low = abs(datalayer.aggregate.current_dA) < VCU_OPEN_CURRENT_THRESHOLD_dA;
+    if (held >= VCU_OPEN_HOLD_MAX_MS) {
+      logging.printf("VCU opmode: current still flowing after %lu ms, opening anyway\n", held);
+      permission = false;
+      delay_running = false;
+    } else if (held >= user_selected_vcu_opmode_open_delay_ms && current_low) {
       permission = false;
       delay_running = false;
     }

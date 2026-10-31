@@ -17,9 +17,11 @@ extern InverterProtocol* inverter;
 bool setup_inverter();
 
 extern bool user_selected_vcu_contactor_control;
-extern uint16_t user_selected_vcu_opmode_can_id;         // 11-bit standard ID of the opmode frame
-extern uint8_t user_selected_vcu_opmode_byte;            // Byte index (0-7) of the opmode value
-extern uint16_t user_selected_vcu_opmode_timeout_ms;     // No valid frame within this time means opmode off
+extern uint16_t user_selected_vcu_opmode_can_id;      // 11-bit standard ID of the opmode frame
+extern uint8_t user_selected_vcu_opmode_byte;         // Byte index (0-7) of the opmode value
+extern uint16_t user_selected_vcu_opmode_timeout_ms;  // No valid frame within this time means opmode off
+extern bool
+    user_selected_vcu_opmode_fault_open_immediately;  // Open at once on real battery fault, else hold until low current
 extern uint16_t user_selected_vcu_opmode_open_delay_ms;  // Delay between opmode off and contactors opening
 // True if the ID is already used by the Leaf emulation or by other traffic on the inverter bus
 bool vcu_opmode_can_id_collides(uint16_t id);
