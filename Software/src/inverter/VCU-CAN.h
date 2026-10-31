@@ -16,16 +16,31 @@ class VCUInverter : public CanInverterProtocol {
   // The ZombieVerter commands the contactors via its opmode spot value, sent with a CAN mapping.
   bool controls_contactor() override { return user_selected_vcu_contactor_control; }
   bool allows_contactor_closing() override;
+  bool aborts_closing_when_not_allowed() override { return user_selected_vcu_contactor_control; }
 
-  // ZombieVerter CAN mapping: ID 0x3A0, position 0, length 8 bit, gain 1, spot value "opmode".
-  static constexpr uint16_t OPMODE_CAN_ID = 0x3A0;
-  // ZombieVerter opmode enum: 0=Off 1=Run 2=Precharge 3=PchFail 4=Charge
-  enum VcuOpmode : uint8_t { MOD_OFF = 0, MOD_RUN = 1, MOD_PRECHARGE = 2, MOD_PCHFAIL = 3, MOD_CHARGE = 4 };
+  /* Expected opmode frame, set up in the ZombieVerter web UI (CAN mapping, direction Send):
+   *   CAN ID    0x3A0 (928), 11-bit standard (configurable)
+   *   Position  0 (= byte 0, configurable), length 8 bit, gain 1, offset 0, unsigned
+   *   Period    100 ms (the Zombie sends all its custom CAN maps every 100 ms)
+   *   Value     the "opmode" spot value
+   * Watchdog: no frame within the timeout (default 500 ms) counts as opmode Off.
+   *
+   * ZombieVerter opmode enum (Stm32-vcu include/param_prj.h, OPMODES). This is the only place the
+   * mapping is defined: Precharge/Run/Charge allow the contactors, everything else is treated as Off.
+   * Preheat (5), PchFail (3) and any value above 5 are deliberately not allowed to close contactors. */
+  enum VcuOpmode : uint8_t {
+    MOD_OFF = 0,
+    MOD_RUN = 1,
+    MOD_PRECHARGE = 2,
+    MOD_PCHFAIL = 3,
+    MOD_CHARGE = 4,
+    MOD_PREHEAT = 5
+  };
+  static bool opmode_allows_closing(uint8_t opmode) {
+    return opmode == MOD_PRECHARGE || opmode == MOD_RUN || opmode == MOD_CHARGE;
+  }
 
  private:
-  unsigned long lastOpmodeFrameMillis = 0;
-  bool opmodeReceived = false;
-  uint8_t vcuOpmode = MOD_OFF;
   unsigned long previousMillis10ms = 0;
   unsigned long previousMillis100ms = 0;
   unsigned long previousMillis500ms = 0;

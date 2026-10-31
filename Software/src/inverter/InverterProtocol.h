@@ -58,6 +58,10 @@ class InverterProtocol {
 
   virtual bool allows_contactor_closing() { return false; }
 
+  // If true, losing the permission also aborts a closing sequence that is still in progress
+  // (negative/precharge/positive), instead of only opening contactors that already completed.
+  virtual bool aborts_closing_when_not_allowed() { return false; }
+
   virtual bool supports_battery_id() { return false; }
 
   // An override returning true must also be listed in inverter_type_provides_shunt().

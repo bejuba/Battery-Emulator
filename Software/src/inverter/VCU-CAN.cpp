@@ -78,31 +78,122 @@ void VCUInverter::update_values() {  //Called every 1s
   LEAF_5BC.data.u8[4] = static_cast<uint8_t>((datalayer.aggregate.soh_pptt / 100) << 1);
 }
 
+namespace {
+// Opmode state, written by the CAN receive path and read by the contactor handler and web UI
+int16_t last_opmode = -1;  // -1 until the first valid frame has arrived
+unsigned long last_opmode_ms = 0;
+bool permission = false;  // Latched permission handed to the contactor state machine
+bool delay_running = false;
+unsigned long delay_start_ms = 0;
+
+/* IDs already used on the inverter bus: what the Leaf emulation sends and receives, the Leaf OBD2
+ * request/response IDs and the Nissan LEAF charger frames. The opmode ID must not match any of them.
+ * Note: other batteries or devices sharing this bus are not known here, e.g. the BMW batteries send 0x3A0. */
+constexpr uint16_t RESERVED_IDS[] = {0x1DC, 0x1DB, 0x55B, 0x5BC, 0x59E, 0x5C0,  // Sent by the emulation
+                                     0x1F2, 0x1D4, 0x50B, 0x50C,                // Received by the emulation
+                                     0x79B, 0x7BB,                              // LEAF OBD2 request / response
+                                     0x380, 0x5EB, 0x5BF, 0x1ED, 0x1C2,         // ZE1 battery frames
+                                     0x679, 0x390, 0x393};                      // Nissan LEAF charger
+
+bool opmode_fresh(unsigned long now) {
+  return last_opmode >= 0 && (now - last_opmode_ms) < user_selected_vcu_opmode_timeout_ms;
+}
+}  // namespace
+
+bool vcu_opmode_can_id_collides(uint16_t id) {
+  for (uint16_t reserved : RESERVED_IDS) {
+    if (reserved == id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+int16_t vcu_opmode_last() {
+  return last_opmode;
+}
+
+bool vcu_opmode_fresh() {
+  return opmode_fresh(millis());
+}
+
+const char* vcu_opmode_name(int16_t opmode) {
+  switch (opmode) {
+    case VCUInverter::MOD_OFF:
+      return "Off";
+    case VCUInverter::MOD_RUN:
+      return "Run";
+    case VCUInverter::MOD_PRECHARGE:
+      return "Precharge";
+    case VCUInverter::MOD_PCHFAIL:
+      return "PchFail";
+    case VCUInverter::MOD_CHARGE:
+      return "Charge";
+    case VCUInverter::MOD_PREHEAT:
+      return "Preheat";
+    case -1:
+      return "none received";
+    default:
+      return "unknown";
+  }
+}
+
+/* Permission for the contactor state machine, evaluated every contactor handler pass.
+ * - Granted only while opmode is Precharge/Run/Charge, the frame is fresh and the real battery is healthy.
+ * - Real battery fault: revoked at once, no delay.
+ * - Opmode off/unknown or stale frame: revoked after the configured delay, so the Zombie can bring
+ *   the current to zero first. Boot state is off until a valid frame arrives. */
 bool VCUInverter::allows_contactor_closing() {
-  // Fail safe: open contactors if the opmode frame is missing or stale
-  if (!opmodeReceived || (millis() - lastOpmodeFrameMillis) >= INTERVAL_2_S) {
+  unsigned long now = millis();
+
+  if (datalayer.battery.status.real_bms_status == BMS_FAULT) {
+    permission = false;
+    delay_running = false;
     return false;
   }
-  return vcuOpmode == MOD_PRECHARGE || vcuOpmode == MOD_RUN || vcuOpmode == MOD_CHARGE;
+
+  bool wanted = opmode_fresh(now) && opmode_allows_closing(static_cast<uint8_t>(last_opmode));
+  bool healthy =
+      datalayer.system.status.system_status != FAULT && (datalayer.battery.status.real_bms_status == BMS_STANDBY ||
+                                                         datalayer.battery.status.real_bms_status == BMS_ACTIVE);
+
+  if (wanted) {
+    delay_running = false;
+    if (healthy) {
+      permission = true;
+    } else if (!permission) {
+      return false;  // Not healthy, so do not start closing. If already closed, keep it, the fault paths handle it
+    }
+  } else if (permission) {
+    if (!delay_running) {
+      delay_running = true;
+      delay_start_ms = now;
+    }
+    if (now - delay_start_ms >= user_selected_vcu_opmode_open_delay_ms) {
+      permission = false;
+      delay_running = false;
+    }
+  }
+  return permission;
 }
 
 void VCUInverter::map_can_frame_to_variable(CAN_frame rx_frame) {
+  if (user_selected_vcu_contactor_control && !rx_frame.ext_ID && rx_frame.ID == user_selected_vcu_opmode_can_id) {
+    if (rx_frame.DLC > user_selected_vcu_opmode_byte) {
+      int16_t opmode = rx_frame.data.u8[user_selected_vcu_opmode_byte];
+      if (opmode != last_opmode) {
+        logging.printf("VCU opmode: %s (%d)\n", vcu_opmode_name(opmode), opmode);
+      }
+      last_opmode = opmode;
+      last_opmode_ms = millis();
+      datalayer.system.status.CAN_inverter_still_alive = CAN_STILL_ALIVE;
+    }
+    return;
+  }
   switch (rx_frame.ID) {
-    case OPMODE_CAN_ID:
-      vcuOpmode = rx_frame.data.u8[0];
-      lastOpmodeFrameMillis = millis();
-      opmodeReceived = true;
-      datalayer.system.status.CAN_inverter_still_alive = CAN_STILL_ALIVE;
-      break;
     case 0x1F2:
-      datalayer.system.status.CAN_inverter_still_alive = CAN_STILL_ALIVE;
-      break;
     case 0x1D4:
-      datalayer.system.status.CAN_inverter_still_alive = CAN_STILL_ALIVE;
-      break;
     case 0x50B:
-      datalayer.system.status.CAN_inverter_still_alive = CAN_STILL_ALIVE;
-      break;
     case 0x50C:
       datalayer.system.status.CAN_inverter_still_alive = CAN_STILL_ALIVE;
       break;

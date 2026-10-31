@@ -1142,6 +1142,22 @@ String raw_settings_processor(const String& var, BatteryEmulatorSettingsStore& s
     return settings.getBool("VCUCNTCTRL") ? "checked" : "";
   }
 
+  if (var == "VCUOPID") {
+    return "0x" + String(settings.getUInt("VCUOPID", 0x3A0), HEX);
+  }
+
+  if (var == "VCUOPBYTE") {
+    return String(settings.getUInt("VCUOPBYTE", 0));
+  }
+
+  if (var == "VCUOPTMO") {
+    return String(settings.getUInt("VCUOPTMO", 500));
+  }
+
+  if (var == "VCUOPDLY") {
+    return String(settings.getUInt("VCUOPDLY", 500));
+  }
+
   if (var == "VWDCDC") {
     return settings.getBool("VWDCDC") ? "checked" : "";
   }
@@ -2289,6 +2305,14 @@ String qnhck_zero_text(uint16_t zero_mV) {
         <div class="if-vcu">
         <label for='vcucntctrl'>ZombieVerter contactor control: </label>
         <input type='checkbox' name='VCUCNTCTRL' id='vcucntctrl' value='on' %VCUCNTCTRL% />
+        <label>Opmode CAN ID (11-bit, e.g. 0x3A0): </label>
+        <input name='VCUOPID' type='text' value="%VCUOPID%" pattern="(0[xX][0-9a-fA-F]{1,3}|[0-9]{1,4})" />
+        <label>Opmode byte index (0-7): </label>
+        <input name='VCUOPBYTE' type='number' value="%VCUOPBYTE%" min="0" max="7" step="1" />
+        <label>Opmode timeout, ms: </label>
+        <input name='VCUOPTMO' type='number' value="%VCUOPTMO%" min="200" max="5000" step="50" />
+        <label>Open delay after opmode off, ms: </label>
+        <input name='VCUOPDLY' type='number' value="%VCUOPDLY%" min="0" max="5000" step="50" />
         </div>
 
         <div class="if-sofar">

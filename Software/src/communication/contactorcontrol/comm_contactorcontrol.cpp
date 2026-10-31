@@ -53,6 +53,9 @@ uint32_t bms_power_on_ms = 0;
 static uint32_t prechargeStartTime = 0;
 uint32_t negativeStartTime = 0;
 uint32_t prechargeCompletedTime = 0;
+static uint32_t closingSequenceStartTime = 0;
+uint32_t last_precharge_duration_ms = 0;
+uint32_t last_closing_duration_ms = 0;
 uint32_t timeSpentInFaultedMode = 0;
 uint32_t currentTime = 0;
 uint32_t lastPowerRemovalTime = 0;
@@ -182,6 +185,25 @@ bool init_contactors() {
   return true;
 }
 
+const char* contactor_state_name() {
+  switch (contactorStatus) {
+    case DISCONNECTED:
+      return "Open";
+    case START_PRECHARGE:
+    case PRECHARGE:
+      return "Negative closed";
+    case POSITIVE:
+      return "Precharging";
+    case PRECHARGE_OFF:
+      return "Positive closed, precharge ending";
+    case COMPLETED:
+      return "Closed";
+    case SHUTDOWN_REQUESTED:
+      return "Fault latched (open)";
+  }
+  return "Unknown";
+}
+
 static void dbg_contactors(const char* state) {
   logging.print("[");
   logging.print(millis());
@@ -296,6 +318,15 @@ void handle_contactors() {
 
     currentTime = millis();
 
+    // Some inverters (VCU opmode control) also revoke the permission while the ladder is running. Abort it
+    // right away and let it start over once allowed again
+    if (contactorStatus != DISCONNECTED && inverter && inverter->controls_contactor() &&
+        inverter->aborts_closing_when_not_allowed() && !datalayer.system.status.inverter_allows_contactor_closing) {
+      dbg_contactors("OPEN (inverter request during closing)");
+      contactorStatus = DISCONNECTED;
+      return;
+    }
+
     if ((currentTime < INTERVAL_10_S) || !battery_detected) {
       // Skip running the state machine before system has started up. Conditions are 10sec post boot, and battery comms established
       // Gives the system some time to detect any faults from battery before blindly just engaging the contactors
@@ -309,6 +340,7 @@ void handle_contactors() {
         set_indicator_led(IndicatorLed::CONTACTOR_NEG, true);
         dbg_contactors("NEGATIVE");
         prechargeStartTime = currentTime;
+        closingSequenceStartTime = currentTime;
         contactorStatus = PRECHARGE;
         datalayer.system.status.contactors_engaged = 3;
         break;
@@ -330,6 +362,7 @@ void handle_contactors() {
           set_indicator_led(IndicatorLed::CONTACTOR_POS, true);
           dbg_contactors("POSITIVE");
           prechargeCompletedTime = currentTime;
+          last_precharge_duration_ms = currentTime - negativeStartTime;
           contactorStatus = PRECHARGE_OFF;
           datalayer.system.status.contactors_engaged = 3;
         }
@@ -342,6 +375,9 @@ void handle_contactors() {
           set(posPin, ON, pwm_hold_duty);
           set_indicator_led(IndicatorLed::PRECHARGE, false);
           dbg_contactors("PRECHARGE_OFF");
+          last_closing_duration_ms = currentTime - closingSequenceStartTime;
+          logging.printf("Contactors: precharge took %lu ms, closing sequence complete after %lu ms\n",
+                         (unsigned long)last_precharge_duration_ms, (unsigned long)last_closing_duration_ms);
           contactorStatus = COMPLETED;
           datalayer.system.status.contactors_engaged = 1;
         }

@@ -1,0 +1,90 @@
+name: 🔋 Compile Lilygo T-2CAN only
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [combined-meb-dcdc-vcu]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      PIO_ENV: lilygo_2CAN_330
+
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0 # To be able to determine the ancestor tag
+
+    - name: "Fetch upstream tags" # for forks
+      run: git fetch https://github.com/dalathegreat/Battery-Emulator.git --tags --no-recurse-submodules
+
+    - name: Try env cache
+      id: env-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.platformio/packages
+          ~/.platformio/platforms
+          ~/.platformio/.cache
+          sdkconfig.defaults
+        key: ${{ runner.os }}-pio-${{ hashFiles('platformio.ini', 'sdkconfig.be_size.defaults') }}-${{ env.PIO_ENV }}
+
+    - name: Pin sdkconfig mtime
+      run: touch -m -d2026-01-01 sdkconfig.be_size.defaults
+
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.13'
+
+    # Same core/platform pin as compile-common-image.yml
+    - name: Constrain PlatformIO Core version
+      run: |
+        printf 'platformio==6.2.0\npioarduino==6.2.0\n' > "$RUNNER_TEMP/pio-constraints.txt"
+        echo "PIP_CONSTRAINT=$RUNNER_TEMP/pio-constraints.txt" >> "$GITHUB_ENV"
+        echo "UV_CONSTRAINT=$RUNNER_TEMP/pio-constraints.txt" >> "$GITHUB_ENV"
+
+    - name: Install PlatformIO Core
+      run: pip install --upgrade "platformio==6.2.0"
+
+    - name: Build image
+      env:
+        GITHUB_REPOSITORY: ${{ github.repository }}
+      run: pio run -e "$PIO_ENV"
+
+    - name: Upload OTA image
+      uses: actions/upload-artifact@v7
+      with:
+        name: T2CAN-ota-${{ github.sha }}
+        path: .pio/build/${{ env.PIO_ENV }}/firmware.bin
+        if-no-files-found: error
+
+    - name: Upload factory image
+      uses: actions/upload-artifact@v7
+      with:
+        name: T2CAN-factory-${{ github.sha }}
+        path: .pio/build/${{ env.PIO_ENV }}/firmware.factory.bin
+        if-no-files-found: error
+
+    - name: Reduce size of cache
+      if: steps.env-cache.outputs.cache-hit != 'true'
+      run: |
+        for a in esp32c3 esp32c5 esp32c6 esp32h2 esp32p4 esp32p4_es esp32s2; do
+          rm -rf ~/.platformio/packages/framework-arduinoespressif32-libs/$a
+        done
+
+    - name: Save env cache
+      if: steps.env-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.platformio/packages
+          ~/.platformio/platforms
+          ~/.platformio/.cache
+          sdkconfig.defaults
+        key: ${{ runner.os }}-pio-${{ hashFiles('platformio.ini', 'sdkconfig.be_size.defaults') }}-${{ env.PIO_ENV }}

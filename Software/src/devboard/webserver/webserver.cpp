@@ -549,7 +549,8 @@ void init_webserver() {
       "GTWCHASSIS",    "GTWPACK",       "LEDMODE",    "GPIOOPT1",   "GPIOOPT2",     "GPIOOPT3",      "INVSUNTYPE",
       "GPIOOPT4",      "PYLONBAUD",     "PYLONBRAND", "DALYPWRPCT", "DALYPWRDV",    "DALYDVSTART",   "DALYPWRDEG",
       "DALYPWR0C",     "GPIOOPT5",      "GPIOOPT6",   "INVICNT",    "FOXESSTYPE",   "FOXESSSUBTYPE", "FOXESSMODULES",
-      "CHGTAPERSTART", "CHGTAPERFLOOR", "SYSLOGPORT", "SYSLOGFAC",  "PERBMSRESETH",
+      "CHGTAPERSTART", "CHGTAPERFLOOR", "SYSLOGPORT", "SYSLOGFAC",  "PERBMSRESETH", "VCUOPBYTE",     "VCUOPTMO",
+      "VCUOPDLY",
 #ifndef SMALL_FLASH_DEVICE
       "CTVNOM",        "CTANOM",        "QNHIPN",     "QNHVO",
 #endif  // SMALL_FLASH_DEVICE
@@ -592,6 +593,36 @@ void init_webserver() {
           request->send(400, "text/plain",
                         "Set a username and password before enabling web interface password protection.");
           return;
+        }
+
+        // The opmode frame of the VCU contactor control must be a valid 11-bit ID not used by the Leaf emulation
+        {
+          auto vcuCtrl = request->getParam("VCUCNTCTRL", true);
+          if (vcuCtrl != nullptr && vcuCtrl->value() == "on") {
+            auto num = [&](const char* name, long fallback) {
+              auto p = request->getParam(name, true);
+              return p != nullptr ? strtol(p->value().c_str(), nullptr, 0) : fallback;
+            };
+            long opId = num("VCUOPID", user_selected_vcu_opmode_can_id);
+            if (opId < 1 || opId > 0x7FF) {
+              request->send(400, "text/plain", "VCU opmode CAN ID must be an 11-bit ID (1 - 0x7FF).");
+              return;
+            }
+            if (vcu_opmode_can_id_collides((uint16_t)opId)) {
+              request->send(400, "text/plain",
+                            "VCU opmode CAN ID is already used by the Leaf emulation or other traffic on the "
+                            "inverter bus. Pick another ID.");
+              return;
+            }
+            long opByte = num("VCUOPBYTE", user_selected_vcu_opmode_byte);
+            long opTimeout = num("VCUOPTMO", user_selected_vcu_opmode_timeout_ms);
+            long opDelay = num("VCUOPDLY", user_selected_vcu_opmode_open_delay_ms);
+            if (opByte < 0 || opByte > 7 || opTimeout < 200 || opTimeout > 5000 || opDelay < 0 || opDelay > 5000) {
+              request->send(400, "text/plain",
+                            "VCU opmode settings out of range: byte 0-7, timeout 200-5000 ms, delay 0-5000 ms.");
+              return;
+            }
+          }
         }
 
         // Each battery needs a CAN interface of its own. Inverters, shunts and chargers
@@ -663,6 +694,9 @@ void init_webserver() {
           } else if (p->name() == "BATTPVMIN") {
             auto type = p->value().toFloat() * 10.0f;
             settings.saveUInt("BATTPVMIN", (int)type);
+          } else if (p->name() == "VCUOPID") {
+            // Accepts hex (0x3A0) or decimal, stored as a number
+            settings.saveUInt("VCUOPID", (uint32_t)strtol(p->value().c_str(), nullptr, 0));
           } else if (p->name() == "VWDCDCV") {
             // 12V rail setpoint, entered in volts and stored in mV. Clamp to the range the
             // DC-DC accepts (NVEM_10 encodes 10.6 - 16.0 V, we allow up to 14.5 V).
@@ -1849,10 +1883,21 @@ static bool render_live(CheckedHtml& content) {
     }
     content += "<br>Inverter allows contactor closing: ";
     if (datalayer.system.status.inverter_allows_contactor_closing == true) {
-      content += "<span>✓</span></h4>";
+      content += "<span>✓</span>";
     } else {
-      content += "<span style='color: red;'>✗</span></h4>";
+      content += "<span style='color: red;'>✗</span>";
     }
+    if (inverter && inverter->controls_contactor() && user_selected_inverter_protocol == InverterProtocolType::VCU) {
+      content += "<br>VCU opmode: " + String(vcu_opmode_name(vcu_opmode_last())) + " (" +
+                 String((int)vcu_opmode_last()) + (vcu_opmode_fresh() ? "" : ", stale") + "), CAN ID 0x" +
+                 String((unsigned)user_selected_vcu_opmode_can_id, HEX) + " byte " +
+                 String((unsigned)user_selected_vcu_opmode_byte) + "<br>Contactors: " + String(contactor_state_name());
+      if (last_closing_duration_ms > 0) {
+        content += "<br>Last precharge: " + String(last_precharge_duration_ms) + " ms, closing sequence " +
+                   String(last_closing_duration_ms) + " ms";
+      }
+    }
+    content += "</h4>";
     if (battery2) {
       content += "<h4>2ⁿᵈ battery allowed to join: ";
       if (datalayer.system.status.battery2_allowed_contactor_closing == true) {
