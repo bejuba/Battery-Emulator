@@ -90,7 +90,6 @@ jobs:
         merge-multiple: true
 
     - name: Get Artifact URLs JSON Map
-      if: steps.ctx.outputs.run_id != ''
       id: artifact_json
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
