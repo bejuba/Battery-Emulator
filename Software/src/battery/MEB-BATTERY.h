@@ -440,6 +440,7 @@ class MebBattery : public CanBattery, public IsoTp {
   unsigned long hv_coordinator_ms = 0;                     // phase-start timestamp (diagnostics)
   static constexpr unsigned long HV_STEP_STALL_MS = 3000;  // log if a step stalls this long
   static constexpr int PRECHARGE_VOLTAGE_MATCH_DV = 100;   // DCDC HV vs pack match window (10 V)
+  static constexpr unsigned long DCDC_TIMEOUT_MS = 1000;   // DCDC_01 / DCDC_04 silent this long = DC/DC lost
 
   static constexpr uint8_t DCDC_MODE_STANDBY = 0;
   static constexpr uint8_t DCDC_MODE_PRECHARGE_ON = 1;  // precharge
@@ -447,6 +448,9 @@ class MebBattery : public CanBattery, public IsoTp {
   static constexpr uint16_t DCDC_MIN_SETPOINT_MV = 10600;
 
   // DCDC converter state, decoded from the received DCDC_01/02/04 messages.
+  unsigned long dcdc_mode_msg_ms = 0;  // millis() of the last DCDC_04, 0 = never received
+  unsigned long dcdc_hv_msg_ms = 0;    // millis() of the last DCDC_01, 0 = never received
+  bool dcdc_lost_logged = false;
   uint8_t dcdc_actual_mode = DCDC_MODE_STANDBY;  // DC mode from DCDC_04
   bool dcdc_precharge_complete = false;          // DC precharge status from DCDC_04
   int32_t dcdc_hv_voltage_dV = 0;                // DCDC_01 HV voltage measured

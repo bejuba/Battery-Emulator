@@ -809,6 +809,7 @@ void MebBattery::handle_incoming_can_frame(CAN_frame rx_frame) {
       break;
     }
     case DCDC_01: {  // DCDC (0x2AE) — HV side voltage/current
+      dcdc_hv_msg_ms = millis();
       // DC HV voltage (bits 12-23, factor 0.25 V): raw * 0.25 V = raw * 2.5 dV
       uint16_t dc_hv_raw = ((uint16_t)rx_frame.data.u8[2] << 4) | (rx_frame.data.u8[1] >> 4);
       dcdc_hv_voltage_dV = (int32_t)(dc_hv_raw * 2.5f);
@@ -831,6 +832,7 @@ void MebBattery::handle_incoming_can_frame(CAN_frame rx_frame) {
       dcdc_temperature = rx_frame.data.u8[7] - 40;  // offset of 40 degrees
       break;
     case DCDC_04:  // DCDC (0xF7) — reported converter mode + precharge status
+      dcdc_mode_msg_ms = millis();
       dcdc_actual_mode = (rx_frame.data.u8[5] >> 1) & 0x07;
       // DC precharge status bit
       dcdc_precharge_complete = (rx_frame.data.u8[4] >> 2) & 0x01;
@@ -1500,7 +1502,25 @@ void MebBattery::high_voltage_coordinator(unsigned long currentMillis) {
   // Faults collapse the sequence back to the safe HV_OFF / DCDC Standby state immediately. This is
   // the same set of conditions the old branch-B HV_OFF path reacted to (equipment stop, BMS reset),
   // plus a latched BMS fault and a CAN dropout (first_can_msg_timestamp is cleared after 500 ms silence).
-  const bool fault = datalayer.system.info.equipment_stop_active || bms_reset_active ||
+  // A DC/DC that stopped reporting (or was never heard) must not leave the sequence running on its last
+  // values: drop the decoded state and fall back to HV_OFF / Standby until both frames are fresh again.
+  const bool dcdc_lost = dcdc_mode_msg_ms == 0 || dcdc_hv_msg_ms == 0 ||
+                         currentMillis - dcdc_mode_msg_ms > DCDC_TIMEOUT_MS ||
+                         currentMillis - dcdc_hv_msg_ms > DCDC_TIMEOUT_MS;
+  if (dcdc_lost) {
+    if (!dcdc_lost_logged) {
+      logging.printf("MEB: DC/DC not reporting, HV coordinator held in HV_OFF\n");
+      dcdc_lost_logged = true;
+    }
+    dcdc_actual_mode = DCDC_MODE_STANDBY;
+    dcdc_precharge_complete = false;
+    dcdc_hv_voltage_dV = 0;
+  } else if (dcdc_lost_logged) {
+    logging.printf("MEB: DC/DC reporting again\n");
+    dcdc_lost_logged = false;
+  }
+
+  const bool fault = dcdc_lost || datalayer.system.info.equipment_stop_active || bms_reset_active ||
                      datalayer.battery.status.real_bms_status == BMS_FAULT || first_can_msg_timestamp == 0 ||
                      datalayer.system.status.inverter_allows_contactor_closing == false;
   if (fault) {
