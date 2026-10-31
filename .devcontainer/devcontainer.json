@@ -1,0 +1,23 @@
+{
+  "name": "Battery-Emulator",
+  "image": "mcr.microsoft.com/devcontainers/cpp:1-ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    }
+  },
+  "postCreateCommand": "python3 -m venv .venv && .venv/bin/python -m pip install --upgrade pip platformio pre-commit",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "platformio.platformio-ide",
+        "ms-vscode.cpptools"
+      ],
+      "settings": {
+        "terminal.integrated.env.linux": {
+          "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
+        }
+      }
+    }
+  }
+}

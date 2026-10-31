@@ -60,6 +60,22 @@ PlatformIO is an extension that adds all the necessary functionality to VSCode.
       - Alternatively, you can use the checkmark icon in the blue status bar at the bottom of the VSCode window, or the keyboard shortcut Ctrl+Alt+B (Windows/Linux) / Cmd+Alt+B (macOS).
    - The build process will start. You can monitor the output in the integrated terminal. A successful build will end with ===== [SUCCESS] Took X.XX seconds =====.
 
+### Developing in GitHub Codespaces
+
+This repository includes a Codespaces dev container with PlatformIO, the C++ toolchain, and the PlatformIO VS Code extension.
+
+1. Open the repository or pull request on GitHub and select **Code** > **Codespaces** > **Create codespace**. Choose the branch you want to work on (for example, the branch for an open pull request).
+2. Wait for the container setup to finish. In the integrated terminal, build for your target board, for example:
+
+   ```sh
+   pio run -e lilygo_330
+   ```
+
+   Other build environments are listed in `platformio.ini`.
+3. Make and commit your changes in the Codespace, then push the branch and open or update a pull request.
+
+Codespaces can compile firmware, but they cannot access a board connected to your local computer over USB. Use a local development environment to upload firmware over USB; OTA uploads still require network access to the board.
+
 ### 4. OptionA: Uploading Code to Board via USB
 
 - Connect your Battery-Emulator hardware to your computer using a USB cable.
@@ -158,5 +174,4 @@ After selecting the hardware you need, click the "**Upload Artifact**", and ther
 <img alt="image" src="https://github.com/user-attachments/assets/68f10c73-772f-499b-a14c-6b84d11c0ef2" />
 
 After downloading the .zip file, extract the .bin file from it. Then [OTA Update](https://github.com/dalathegreat/Battery-Emulator/wiki/OTA-Update) your device with this .bin file!
-
 

@@ -20,6 +20,7 @@ test/tests[1]_include.cmake
 #ignore platformio & compilation files
 .pioenvs
 .piolibdeps
+.venv/
 .clang_complete
 .gcc-flags.json
 .pio
