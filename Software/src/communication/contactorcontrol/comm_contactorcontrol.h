@@ -19,6 +19,11 @@ extern bool periodic_bms_reset_defer_low_soc;
 extern bool periodic_bms_reset_skip_balancing;
 extern bool remote_bms_reset;
 extern uint16_t precharge_time_ms;
+// Duration of the last precharge (precharge resistor on until positive contactor on) and of the whole
+// closing sequence (negative on until precharge off), in ms. 0 until a sequence has completed.
+extern uint32_t last_precharge_duration_ms;
+extern uint32_t last_closing_duration_ms;
+const char* contactor_state_name();
 extern uint16_t pwm_frequency;
 extern uint16_t pwm_hold_duty;
 // millis() when the BMS power was last switched on: at boot by init_contactors(), then after each

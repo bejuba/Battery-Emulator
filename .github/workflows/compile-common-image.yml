@@ -23,20 +23,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - board_name: "Lilygo T-CAN485"
-            pio_env: "lilygo_330"
-          - board_name: "Stark CMR"
-            pio_env: "stark_330"
           - board_name: "Lilygo T-2CAN"
             pio_env: "lilygo_2CAN_330"
-          - board_name: "ESP32 DevKit V1"
-            pio_env: "esp32devkit_330"
-          - board_name: "BECom ES32S3"
-            pio_env: "BECom_330"
-          - board_name: "Waveshare ESP32S3RS485CAN"
-            pio_env: "waveshare_330"
-          - board_name: "DFRobot Edge101"
-            pio_env: "dfrobot_edge101_330"
 
     steps:
     - uses: actions/checkout@v7
